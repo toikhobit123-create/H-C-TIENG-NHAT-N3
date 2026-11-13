@@ -28,33 +28,36 @@ jobs:
 
       - name: Prepare debug keystore
         run: |
+          if [ ! -f debug.keystore ] && [ -f debug.keystore.base64 ]; then
+            tr -d '\r\n' < debug.keystore.base64 | base64 -d > debug.keystore || rm -f debug.keystore
+          fi
           if [ ! -f debug.keystore ]; then
-            if [ -f debug.keystore.base64 ]; then
-              base64 -d debug.keystore.base64 > debug.keystore
-            else
-              keytool -genkeypair -v \
-                -keystore debug.keystore \
-                -storepass android \
-                -alias androiddebugkey \
-                -keypass android \
-                -keyalg RSA \
-                -keysize 2048 \
-                -validity 10000 \
-                -dname "CN=Android Debug,O=Android,C=US"
-            fi
+            keytool -genkeypair -v \
+              -keystore debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
           fi
 
       - name: Build Debug APK
         run: gradle :app:assembleDebug --no-daemon
 
       - name: Build Release APK (when signing secrets are configured)
-        if: ${{ secrets.KEYSTORE_BASE64 != '' && secrets.STORE_PASSWORD != '' && secrets.KEY_PASSWORD != '' }}
         env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > my-upload-key.jks
-          gradle :app:assembleRelease --no-daemon
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$STORE_PASSWORD" ] && [ -n "$KEY_PASSWORD" ]; then
+            echo "$KEYSTORE_BASE64" | tr -d '\r\n' | base64 -d > my-upload-key.jks
+            gradle :app:assembleRelease --no-daemon
+          else
+            echo "Release signing secrets not configured; skipping Release APK."
+          fi
 
       - name: Upload Debug APK artifact
         uses: actions/upload-artifact@v4
@@ -64,7 +67,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload Release APK artifact (if built)
-        if: ${{ hashFiles('app/build/outputs/apk/release/app-release.apk') != '' }}
+        if: hashFiles('app/build/outputs/apk/release/app-release.apk') != ''
         uses: actions/upload-artifact@v4
         with:
           name: HakuN3-release-apk
@@ -85,6 +88,7 @@ jobs:
             gh release upload latest-apk $FILES --clobber
           else
             gh release create latest-apk $FILES \
+              --target "${{ github.sha }}" \
               --title "Haku N3 - Latest APK" \
               --notes "Automated Android APK build ready for direct installation."
           fi
