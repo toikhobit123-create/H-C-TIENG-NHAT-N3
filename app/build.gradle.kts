@@ -13,7 +13,7 @@ android {
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.aistudio.nihongoquest.qfzn"
+    applicationId = "com.aistudio.hakun3.mkpvxz"
     minSdk = 24
     targetSdk = 36
     versionCode = 1
